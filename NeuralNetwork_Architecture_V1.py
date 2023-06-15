@@ -2,9 +2,9 @@ import random
 import numpy as np
 
 class Agent:
-    def __init__(self, network, layer_sizes):
-        self.neural_network = network
-        self.layer_sizes = layer_sizes  # Add layer_sizes to agent
+    def __init__(self, layer_sizes, dropout_rate=0.2):
+        self.layer_sizes = layer_sizes
+        self.neural_network = NeuralNetwork(layer_sizes, dropout_rate)
         self.fitness = 0
 
 class NeuralNetwork:
@@ -16,12 +16,17 @@ class NeuralNetwork:
             self.weights.append(np.random.randn(layer_sizes[i + 1], layer_sizes[i]))
             self.biases.append(np.random.randn(layer_sizes[i + 1], 1))
         self.dropout_rate = dropout_rate
+        self.n_features = layer_sizes[0]  # layer_sizes[0] is the input layer size
 
     def propagate(self, X, training=True):
-        X = np.array(X).reshape(-1, self.weights[0].shape[1])  # Ensure X has the correct shape
+        X = np.array(X).reshape(-1, self.n_features)  # Ensure X has the correct shape
 
         layer_input = X
         for i in range(len(self.weights) - 1):  # Loop over the layers
+            print(f"layer_input shape: {layer_input.shape}")
+            print(f"weights[i] shape: {self.weights[i].shape}")
+            print(f"weights[i] slice shape: {self.weights[i][:len(layer_input[0])].shape}")
+
             hidden = self.relu(np.dot(layer_input, self.weights[i].T) + self.biases[i].T)
 
             if training:
@@ -32,7 +37,7 @@ class NeuralNetwork:
             layer_input = hidden  # Output of current layer is input for next layer
 
         # Output layer (no dropout)
-        output_layer = self.sigmoid(np.dot(layer_input, self.weights[-1].T) + self.biases[-1].T)
+        output_layer = self.sigmoid(np.dot(layer_input, self.weights[-1][:len(layer_input[0])].T) + self.biases[-1].T)
 
         return output_layer
 
@@ -46,7 +51,7 @@ def generate_agents(population_size, min_layers, max_layers, min_nodes, max_node
     agents = []
     for _ in range(population_size):
         layer_sizes = generate_layer_sizes(min_layers, max_layers, min_nodes, max_nodes)
-        agents.append(Agent((NeuralNetwork(layer_sizes)), layer_sizes))
+        agents.append(Agent(layer_sizes))
     return agents
 
 
@@ -145,8 +150,8 @@ def crossover(agents, pop_size):
                 child1_layer_sizes[i] = parent2.layer_sizes[i]
                 child2_layer_sizes[i] = parent1.layer_sizes[i]
 
-        child1 = Agent(NeuralNetwork(child1_layer_sizes), child1_layer_sizes)
-        child2 = Agent(NeuralNetwork(child2_layer_sizes), child2_layer_sizes)
+        child1 = Agent(child1_layer_sizes)
+        child2 = Agent(child2_layer_sizes)
         offspring.append(child1)
         offspring.append(child2)
 
@@ -180,42 +185,54 @@ def crossover(agents, pop_size):
 #
 #     return agents
 
-def mutation_architecture(agents, min_nodes, max_nodes, input_features, output_size):
-    for agent in agents:
+
+def mutation_architecture(agents, min_nodes, max_nodes, min_layers, max_layers):
+    input_features = 16
+    for i, agent in enumerate(agents):
         if random.uniform(0.0, 1.0) <= 0.3:
+            print(f"\nMutating agent {i}")
             # Decide whether to add, remove or change a layer
             mutation_type = random.choice(["add", "remove", "change"])
+            print(f"Mutation type: {mutation_type}")
 
-            # if mutation_type == "add":
-            #     # Add a new layer at a random position
-            #     new_layer_size = random.randint(min_nodes, max_nodes)
-            #     position = random.randint(1, len(agent.layer_sizes) - 1)  # -1 to exclude the output layer
-            #     agent.layer_sizes.insert(position, new_layer_size)
-            #
-            #     # Also add new random weights and biases
-            #     agent.neural_network.weights.insert(position,
-            #                                         np.random.randn(new_layer_size, agent.layer_sizes[position - 1]))
-            #     agent.neural_network.biases.insert(position, np.random.randn(new_layer_size, 1))
-            #
-            #     if position < len(agent.neural_network.weights):  # Check if it's not the last layer
-            #         agent.neural_network.weights[position] = np.random.randn(agent.layer_sizes[position + 1],
-            #                                                                  new_layer_size)
-            #         agent.neural_network.biases[position] = np.random.randn(agent.layer_sizes[position + 1], 1)
+            if mutation_type == "add":
+                # Add a new layer at a random position
+                new_layer_size = random.randint(min_nodes, max_nodes)
+                position = random.randint(1, len(agent.layer_sizes) - 1)  # -1 to exclude the output layer
+                print(f"Adding layer at position {position} with size {new_layer_size}")
+                agent.layer_sizes.insert(position, new_layer_size)
 
-            # elif mutation_type == "remove" and len(
-            #         agent.layer_sizes) > 3:  # Check if there are layers to remove (excluding input and output layers)
-            #     # Remove a random layer
-            #     position = random.randint(1, len(agent.layer_sizes) - 2)  # -2 to exclude the output layer
-            #     del agent.layer_sizes[position]
-            #
-            #     # Also remove corresponding weights and biases
-            #     del agent.neural_network.weights[position - 1]
-            #     del agent.neural_network.biases[position - 1]
-            #
-            #     if position - 1 < len(agent.neural_network.weights):  # Check if it's not the last layer
-            #         agent.neural_network.weights[position - 1] = np.random.randn(agent.layer_sizes[position],
-            #                                                                      agent.layer_sizes[position - 1])
-            #         agent.neural_network.biases[position - 1] = np.random.randn(agent.layer_sizes[position], 1)
+                # Also add new random weights and biases
+                agent.neural_network.weights.insert(position,
+                                                    np.random.randn(agent.layer_sizes[position], new_layer_size))
+                agent.neural_network.biases.insert(position, np.random.randn(new_layer_size, 1))
+
+                # Adjust weights and biases for the preceding layer
+                agent.neural_network.weights[position - 1] = np.random.randn(new_layer_size,
+                                                                             agent.layer_sizes[position - 1])
+                agent.neural_network.biases[position - 1] = np.random.randn(new_layer_size, 1)
+
+                # Adjust weights and biases for the next layer
+                if position < len(agent.layer_sizes) - 1:  # Check if it's not the last layer
+                    agent.neural_network.weights[position] = np.random.randn(agent.layer_sizes[position + 1],
+                                                                             new_layer_size)
+                    agent.neural_network.biases[position] = np.random.randn(agent.layer_sizes[position + 1], 1)
+
+            if mutation_type == "remove" and len(agent.layer_sizes) > 3:  # Check if there are layers to remove (excluding input and output layers)
+                # Remove a random layer
+                position = random.randint(1, len(agent.layer_sizes) - 2)  # -2 to exclude the output layer
+                print(f"Removing layer at position {position}")
+                del agent.layer_sizes[position]
+
+                # Also remove corresponding weights and biases
+                del agent.neural_network.weights[position - 1]
+                del agent.neural_network.biases[position - 1]
+
+                # Adjust weights and biases for the preceding layer
+                if position - 2 >= 0:  # Check if it's not the first layer
+                    agent.neural_network.weights[position - 2] = np.random.randn(agent.layer_sizes[position - 1],
+                                                                                 agent.layer_sizes[position - 2])
+                    agent.neural_network.biases[position - 2] = np.random.randn(agent.layer_sizes[position - 1], 1)
 
             if mutation_type == "change":
                 # Change the size of a random layer
@@ -225,20 +242,24 @@ def mutation_architecture(agents, min_nodes, max_nodes, input_features, output_s
                 min_nodes_layer = input_features if layer_to_mutate == 1 else min_nodes
 
                 new_layer_size = random.randint(min_nodes_layer, max_nodes)
+                print(f"Changing layer {layer_to_mutate} size to {new_layer_size}")
                 agent.layer_sizes[layer_to_mutate] = new_layer_size
 
-                # Also change the size of corresponding weights and biases
-                agent.neural_network.weights[layer_to_mutate - 1] = np.random.randn(new_layer_size, agent.layer_sizes[
-                    layer_to_mutate - 1])
+                # Adjust weights and biases for the mutated layer
+                agent.neural_network.weights[layer_to_mutate - 1] = np.random.randn(new_layer_size,
+                    agent.layer_sizes[layer_to_mutate - 1])
                 agent.neural_network.biases[layer_to_mutate - 1] = np.random.randn(new_layer_size, 1)
 
-                if layer_to_mutate < len(agent.neural_network.weights):  # Check if it's not the last layer
+                # Adjust weights and biases for the succeeding layer
+                if layer_to_mutate < len(agent.layer_sizes) - 1:  # Check if it's not the last layer
                     agent.neural_network.weights[layer_to_mutate] = np.random.randn(
-                        agent.layer_sizes[layer_to_mutate + 1], new_layer_size)
+                        agent.layer_sizes[layer_to_mutate + 1],
+                        new_layer_size)
                     agent.neural_network.biases[layer_to_mutate] = np.random.randn(
                         agent.layer_sizes[layer_to_mutate + 1], 1)
 
     return agents
+
 
 
 def mutation_weights_bias(agents):
@@ -264,13 +285,32 @@ def mutation_weights_bias(agents):
     return agents
 
 # This loss function is Mean Squared Error (MSE)
-def fitness(agents, X, y):
+# def fitness(agents, X, y):
+#     epsilon = 1e-7  # To prevent division by zero
+#     for agent in agents:
+#         yhat = agent.neural_network.propagate(X)
+#         yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
+#         log_loss = -np.mean(y * np.log(yhat) + (1 - y) * np.log(1 - yhat))
+#         agent.fitness = log_loss
+#     return agents
+
+
+def fitness(agents, X, y, batch_size):
     epsilon = 1e-7  # To prevent division by zero
+    num_samples = X.shape[0]
+
     for agent in agents:
-        yhat = agent.neural_network.propagate(X)
-        yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
-        log_loss = -np.mean(y * np.log(yhat) + (1 - y) * np.log(1 - yhat))
-        agent.fitness = log_loss
+        log_loss_list = []
+        for i in range(0, num_samples, batch_size):
+            X_batch = X[i:i + batch_size]
+            y_batch = y[i:i + batch_size]
+
+            yhat = agent.neural_network.propagate(X_batch)
+            yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
+            log_loss = -np.mean(y_batch * np.log(yhat) + (1 - y_batch) * np.log(1 - yhat))
+            log_loss_list.append(log_loss)
+
+        agent.fitness = np.mean(log_loss_list)  # Average log loss over all batches
     return agents
 
 
@@ -288,6 +328,7 @@ def generate_layer_sizes(min_layers, max_layers, min_nodes, max_nodes):
     return layer_sizes
 
 def execute(X_train, y_train, X_test, y_test, population_size, generations, min_layers, max_layers, min_nodes, max_nodes):
+    batch_size = 124  # For example
 
     # Generate initial population
     agents = generate_agents(population_size, min_layers, max_layers, min_nodes, max_nodes)
@@ -295,7 +336,7 @@ def execute(X_train, y_train, X_test, y_test, population_size, generations, min_
 
     for i in range(generations):
         print('Generation', i, ':')
-        agents = fitness(agents, X_train, y_train)
+        agents = fitness(agents, X_train, y_train, batch_size)
 
         # Sort agents by fitness in ascending order
         #agents = sorted(agents, key=lambda agent: agent.fitness)
@@ -307,7 +348,7 @@ def execute(X_train, y_train, X_test, y_test, population_size, generations, min_
 
         agents = mutation_architecture(agents, min_nodes, max_nodes, min_layers, max_layers)
         agents = mutation_weights_bias(agents)
-        agents = fitness(agents, X_train, y_train)
+        agents = fitness(agents, X_train, y_train, batch_size)
 
         best_agent = min(agents, key=lambda agent: agent.fitness)
         if best_agent.fitness < best_solution.fitness:
@@ -342,7 +383,7 @@ def execute(X_train, y_train, X_test, y_test, population_size, generations, min_
     return best_solution
 
 
-def prepare_data(file, test_ratio=0.2):
+def prepare_data(file, test_ratio=0.25):
     with open(file, "r") as f:
         data = f.readlines()
 
