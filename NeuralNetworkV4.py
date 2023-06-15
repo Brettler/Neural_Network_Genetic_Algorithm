@@ -7,40 +7,45 @@ class Agent:
         self.fitness = 0
 
 class NeuralNetwork:
-    def __init__(self, input_dim, hidden1_dim, hidden2_dim, output_dim, dropout_rate=0.2):
+    def __init__(self, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, dropout_rate=0.2):
         self.weights = [
             np.random.randn(hidden1_dim, input_dim),
             np.random.randn(hidden2_dim, hidden1_dim),
-            np.random.randn(output_dim, hidden2_dim),
+            np.random.randn(hidden3_dim, hidden2_dim),
+            np.random.randn(output_dim, hidden3_dim),
 
         ]
         self.biases = [
             np.random.randn(hidden1_dim, 1),
             np.random.randn(hidden2_dim, 1),
+            np.random.randn(hidden3_dim, 1),
             np.random.randn(output_dim, 1)
         ]
         self.dropout_rate = dropout_rate
 
     def propagate(self, X, training=True):
         X = np.array(X).reshape(-1, self.weights[0].shape[1])  # Ensure X has the correct shape
-
         hidden1 = self.relu(np.dot(X, self.weights[0].T) + self.biases[0].T)
+
+        # if training:
+        #     self.dropout_rate = 0.2
+        #     # Apply dropout to hidden1
+        #     mask1 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden1.shape) / (1 - self.dropout_rate)
+        #     hidden1 *= mask1
+
         hidden2 = self.relu(np.dot(hidden1, self.weights[1].T) + self.biases[1].T)
 
-        if training:
-            # Apply dropout to hidden layers
-            mask1 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden1.shape) / (1 - self.dropout_rate)
-            hidden1 *= mask1
+        # if training:
+        #     # Apply dropout to hidden layers
+        #     mask2 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden2.shape) / (1 - self.dropout_rate)
+        #     hidden2 *= mask2
 
-            mask2 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden2.shape) / (1 - self.dropout_rate)
-            hidden2 *= mask2
+        hidden3 = self.relu(np.dot(hidden2, self.weights[2].T) + self.biases[2].T)
 
-        output_layer = self.sigmoid(np.dot(hidden2, self.weights[2].T) + self.biases[2].T)
+
+        output_layer = self.sigmoid(np.dot(hidden3, self.weights[3].T) + self.biases[3].T)
 
         return output_layer
-
-
-
 
     def relu(self, x):
         return np.maximum(0, x)
@@ -48,15 +53,15 @@ class NeuralNetwork:
         return 1 / (1 + np.exp(-x))
 
 
-def generate_agents(population, input_dim, hidden1_dim, hidden2_dim, output_dim):
-    return [Agent(NeuralNetwork(input_dim, hidden1_dim, hidden2_dim, output_dim)) for _ in range(population)]
-
+def generate_agents(population, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim):
+    return [Agent(NeuralNetwork(input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim)) for _ in range(population)]
 
 
 def selection(agents):
     agents = sorted(agents, key=lambda agent: agent.fitness, reverse=False)
     agents = agents[:int(0.2 * len(agents))]
     return agents
+
 
 def unflatten(flattened, shapes):
     newarray = []
@@ -101,7 +106,8 @@ def crossover(agents, pop_size, alpha=0.5, best_agent=None):
         parent1 = random.choice(agents)
         parent2 = random.choice(agents)
 
-        child1, child2 = generate_agents(2, input_dim, hidden1_dim, hidden2_dim, output_dim)
+        child1 = Agent(NeuralNetwork(input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim))
+        child2 = Agent(NeuralNetwork(input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim))
 
         child1_weights = []
         child2_weights = []
@@ -137,7 +143,7 @@ def crossover(agents, pop_size, alpha=0.5, best_agent=None):
 
 def mutation(agents):
     for agent in agents:
-        if random.uniform(0.0, 1.0) <= 0.2:
+        if random.uniform(0.0, 1.0) <= 0.4:
             weights = agent.neural_network.weights
             biases = agent.neural_network.biases
             shapes = [a.shape for a in weights] + [b.shape for b in biases]
@@ -157,41 +163,44 @@ def mutation(agents):
             agent.neural_network.biases = newarray[len(weights):]
     return agents
 
-# This loss function is Mean Squared Error (MSE)
-def fitness(agents, X, y):
-    epsilon = 1e-7  # To prevent division by zero
-    for agent in agents:
-        yhat = agent.neural_network.propagate(X)
-        yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
-        log_loss = -np.mean(y * np.log(yhat) + (1 - y) * np.log(1 - yhat))
-        agent.fitness = log_loss
-    return agents
-
-
 def calculate_accuracy(agent, X, y, isTraining = True):
     predictions = agent.neural_network.propagate(X, isTraining)
     predicted_labels = np.round(predictions)
     accuracy = np.mean(predicted_labels == y)
     return accuracy
 
-def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_dim, output_dim, population_size, generations, threshold):
-    agents = generate_agents(population_size, input_dim, hidden1_dim, hidden2_dim, output_dim)
 
+def fitness(agents, X, y, batch_size):
+    epsilon = 1e-7  # To prevent division by zero
+    num_samples = X.shape[0]
+    for agent in agents:
+        log_loss_list = []
+        for i in range(0, num_samples, batch_size):
+            X_batch = X[i:i + batch_size]
+            y_batch = y[i:i + batch_size]
+
+            yhat = agent.neural_network.propagate(X_batch)
+            yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
+            log_loss = -np.mean(y_batch * np.log(yhat) + (1 - y_batch) * np.log(1 - yhat))
+            log_loss_list.append(log_loss)
+
+        agent.fitness = np.mean(log_loss_list)  # Average log loss over all batches
+    return agents
+
+def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations):
+    agents = generate_agents(population_size, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim)
+    batch_size = 256
     best_solution = agents[0]
 
     for i in range(generations):
         print('Generation', i, ':')
-        agents = fitness(agents, X_train, y_train)
 
-        # Sort agents by fitness in ascending order
-        agents = sorted(agents, key=lambda agent: agent.fitness)
-
+        agents = fitness(agents, X_train, y_train, batch_size)
         agents = selection(agents)
         # Apply crossover and mutation
         agents = crossover(agents, population_size, best_agent=best_solution)
         agents = mutation(agents)
-
-        agents = fitness(agents, X_train, y_train)
+        agents = fitness(agents, X_train, y_train, batch_size)
 
         best_agent = min(agents, key=lambda agent: agent.fitness)
         if best_agent.fitness < best_solution.fitness:
@@ -216,12 +225,11 @@ def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_di
     print("Best solution: ")
     print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
 
-
-    save_network(best_solution, "best_solution.txt")
+    save_network(best_solution, "wnet")
     return best_solution
 
 
-def prepare_data(file, test_ratio=0.2):
+def prepare_data(file, test_ratio=0.3):
     with open(file, "r") as f:
         data = f.readlines()
 
@@ -232,6 +240,7 @@ def prepare_data(file, test_ratio=0.2):
         outputs.append([int(split_line[1])])
 
     X = np.array(inputs)
+
     y = np.array(outputs)
 
     # shuffle indices to make the split random
@@ -251,26 +260,38 @@ def prepare_data(file, test_ratio=0.2):
 
 
 def save_network(agent, filename):
-    with open(filename, "w") as f:
-        # Saving hidden layer weights
-        f.write(f"{agent.neural_network.weights[0].shape}\n")
-        np.savetxt(f, agent.neural_network.weights[0])
+    # Save weights and biases into dictionary
+    network_dict = {}
+    for i, (weight, bias) in enumerate(zip(agent.neural_network.weights, agent.neural_network.biases)):
+        network_dict[f'weight_{i}'] = weight
+        network_dict[f'bias_{i}'] = bias
 
-        # Saving output layer weights
-        f.write(f"{agent.neural_network.weights[1].shape}\n")
-        np.savetxt(f, agent.neural_network.weights[1])
+    # Save architecture information
+    network_dict['input_dim'] = agent.neural_network.weights[0].shape[1]
+    network_dict['hidden1_dim'] = agent.neural_network.weights[0].shape[0]
+    network_dict['hidden2_dim'] = agent.neural_network.weights[1].shape[0]
+    network_dict['hidden3_dim'] = agent.neural_network.weights[2].shape[0]
+
+    network_dict['output_dim'] = agent.neural_network.weights[3].shape[0]
+    network_dict['dropout_rate'] = agent.neural_network.dropout_rate
+
+    # Save the dictionary to a numpy .npz file
+    np.savez(filename, **network_dict)
+
+
 
 if __name__ == "__main__":
     X_train, X_test, y_train, y_test = prepare_data("nn0.txt")
     input_dim = X_train.shape[1]
-    print(f"input_dim is: {input_dim}")
-    hidden1_dim = 20
-    hidden2_dim = 10
+    print(f"Number of samples(strings) in the train set: {X_train.shape[0]}")
+    print(f"Number of bits in each string: {X_train.shape[1]}")
+
+    hidden1_dim = 8
+    hidden2_dim = 5
+    hidden3_dim = 3
     output_dim = y_train.shape[1]
-    print(f"input_dim is: {output_dim}")
+    print(f"Number of labels in the train set: {y_train.shape[1]}")
     population_size = 100
-    generations = 150
-    threshold = 0.01
-    elite_percentage = 0.2
-    best_agent = execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_dim, output_dim, population_size, generations, threshold)
+    generations = 180
+    best_agent = execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations)
     print(f"Best Agent's fitness: {best_agent.fitness}")

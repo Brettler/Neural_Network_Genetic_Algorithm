@@ -156,14 +156,14 @@ def mutation(agents):
     return agents
 
 # This loss function is Mean Squared Error (MSE)
-def fitness(agents, X, y):
-    epsilon = 1e-7  # To prevent division by zero
-    for agent in agents:
-        yhat = agent.neural_network.propagate(X)
-        yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
-        log_loss = -np.mean(y * np.log(yhat) + (1 - y) * np.log(1 - yhat))
-        agent.fitness = log_loss
-    return agents
+# def fitness(agents, X, y):
+#     epsilon = 1e-7  # To prevent division by zero
+#     for agent in agents:
+#         yhat = agent.neural_network.propagate(X)
+#         yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
+#         log_loss = -np.mean(y * np.log(yhat) + (1 - y) * np.log(1 - yhat))
+#         agent.fitness = log_loss
+#     return agents
 
 
 def calculate_accuracy(agent, X, y, isTraining = True):
@@ -172,15 +172,31 @@ def calculate_accuracy(agent, X, y, isTraining = True):
     accuracy = np.mean(predicted_labels == y)
     return accuracy
 
+def fitness(agents, X, y, batch_size):
+    epsilon = 1e-7  # To prevent division by zero
+    num_samples = X.shape[0]
+    for agent in agents:
+        log_loss_list = []
+        for i in range(0, num_samples, batch_size):
+            X_batch = X[i:i + batch_size]
+            y_batch = y[i:i + batch_size]
+
+            yhat = agent.neural_network.propagate(X_batch)
+            yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
+            log_loss = -np.mean(y_batch * np.log(yhat) + (1 - y_batch) * np.log(1 - yhat))
+            log_loss_list.append(log_loss)
+
+        agent.fitness = np.mean(log_loss_list)  # Average log loss over all batches
+    return agents
 
 def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_dim, output_dim, population_size, generations):
     agents = generate_agents(population_size, input_dim, hidden1_dim, hidden2_dim, output_dim)
-
+    batch_size = 256
     best_solution = agents[0]
 
     for i in range(generations):
         print('Generation', i, ':')
-        agents = fitness(agents, X_train, y_train)
+        agents = fitness(agents, X_train, y_train, batch_size)
 
         # Sort agents by fitness in ascending order
         #agents = sorted(agents, key=lambda agent: agent.fitness)
@@ -189,7 +205,7 @@ def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_di
         # Apply crossover and mutation
         agents = crossover(agents, population_size, best_agent=best_solution)
         agents = mutation(agents)
-        agents = fitness(agents, X_train, y_train)
+        agents = fitness(agents, X_train, y_train, batch_size)
 
         best_agent = min(agents, key=lambda agent: agent.fitness)
         if best_agent.fitness < best_solution.fitness:
@@ -259,7 +275,7 @@ def save_network(agent, filename):
         np.savetxt(f, agent.neural_network.weights[1])
 
 if __name__ == "__main__":
-    X_train, X_test, y_train, y_test = prepare_data("nn0.txt")
+    X_train, X_test, y_train, y_test = prepare_data("nn1.txt")
     input_dim = X_train.shape[1]
     print(f"input_dim is: {input_dim}")
     hidden1_dim = 15
