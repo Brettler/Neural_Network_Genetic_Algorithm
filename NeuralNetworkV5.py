@@ -1,5 +1,8 @@
 import random
 import numpy as np
+from matplotlib import pyplot as plt
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+from sklearn.manifold import TSNE
 
 class Agent:
     def __init__(self, network):
@@ -9,12 +12,12 @@ class Agent:
 class NeuralNetwork:
     def __init__(self, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, dropout_rate=0.2):
         self.weights = [
-            np.random.randn(hidden1_dim, input_dim),
-            np.random.randn(hidden2_dim, hidden1_dim),
-            np.random.randn(hidden3_dim, hidden2_dim),
-            np.random.randn(output_dim, hidden3_dim),
-
+            np.random.randn(hidden1_dim, input_dim) / np.sqrt(input_dim),
+            np.random.randn(hidden2_dim, hidden1_dim) / np.sqrt(hidden1_dim),
+            np.random.randn(hidden3_dim, hidden2_dim) / np.sqrt(hidden2_dim),
+            np.random.randn(output_dim, hidden3_dim) / np.sqrt(hidden3_dim),
         ]
+
         self.biases = [
             np.random.randn(hidden1_dim, 1),
             np.random.randn(hidden2_dim, 1),
@@ -22,35 +25,61 @@ class NeuralNetwork:
             np.random.randn(output_dim, 1)
         ]
         self.dropout_rate = dropout_rate
+        # New instance variables for batch norm
+        self.bn_means = [np.zeros((1, dim)) for dim in [hidden1_dim, hidden2_dim, hidden3_dim, output_dim]]
+        self.bn_vars = [np.zeros((1, dim)) for dim in [hidden1_dim, hidden2_dim, hidden3_dim, output_dim]]
+        self.bn_decay = 0.9  # Decay rate for the running averages
 
-    def propagate(self, X, training=True):
+    def propagate(self, X, training=True, return_hidden=False):
         X = np.array(X).reshape(-1, self.weights[0].shape[1])  # Ensure X has the correct shape
-        hidden1 = self.relu(np.dot(X, self.weights[0].T) + self.biases[0].T)
-
-        # if training:
-        #     self.dropout_rate = 0.2
-        #     # Apply dropout to hidden1
-        #     mask1 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden1.shape) / (1 - self.dropout_rate)
-        #     hidden1 *= mask1
+        hidden1 = self.elu(np.dot(X, self.weights[0].T) + self.biases[0].T)
 
         hidden2 = self.relu(np.dot(hidden1, self.weights[1].T) + self.biases[1].T)
+        hidden2 = self.batch_norm(hidden2, 1, training)  # Specify layer index and training
 
-        # if training:
-        #     # Apply dropout to hidden layers
-        #     mask2 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden2.shape) / (1 - self.dropout_rate)
-        #     hidden2 *= mask2
-
-        hidden3 = self.relu(np.dot(hidden2, self.weights[2].T) + self.biases[2].T)
-
+        hidden3 = self.elu(np.dot(hidden2, self.weights[2].T) + self.biases[2].T)
+        hidden3 = self.dropout(hidden3, self.dropout_rate, training)
 
         output_layer = self.sigmoid(np.dot(hidden3, self.weights[3].T) + self.biases[3].T)
 
-        return output_layer
+        # If we're interested in the activations of the last hidden layer for draw TSNE:
+        if return_hidden:
+            return hidden3
+        else:
+            return output_layer
 
     def relu(self, x):
         return np.maximum(0, x)
+
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-x))
+
+    def elu(self, x,
+            alpha=1.0):  # The alpha parameter controls the value that ELU converges towards for negative net inputs
+        return np.where(x >= 0.0, x, alpha * (np.exp(x) - 1))
+
+    def dropout(self, X, dropout_rate, training=True):
+        if not training:
+            return X
+        keep_prob = 1 - dropout_rate
+        mask = np.random.binomial(1, keep_prob, size=X.shape) / keep_prob
+        return X * mask
+
+    def batch_norm(self, X, layer, training=True):
+        if training:
+            mean = np.mean(X, axis=0, keepdims=True)
+            var = np.var(X, axis=0, keepdims=True)
+
+            # Update running averages
+            self.bn_means[layer] = self.bn_decay * self.bn_means[layer] + (1 - self.bn_decay) * mean
+            self.bn_vars[layer] = self.bn_decay * self.bn_vars[layer] + (1 - self.bn_decay) * var
+        else:
+            # Use running averages
+            mean = self.bn_means[layer]
+            var = self.bn_vars[layer]
+
+        X_norm = (X - mean) / np.sqrt(var + 1e-8)
+        return X_norm
 
 
 def generate_agents(population, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim):
@@ -99,7 +128,7 @@ def blend_crossover(alpha, parent1, parent2):
     return child1_genes, child2_genes
 
 
-def crossover(agents, pop_size, alpha=0.5, best_agent=None):
+def crossover(input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, agents, pop_size, alpha=0.5, best_agent=None):
     offspring = []
     num_offspring = pop_size - len(agents)
     for _ in range(num_offspring // 2):
@@ -143,7 +172,7 @@ def crossover(agents, pop_size, alpha=0.5, best_agent=None):
 
 def mutation(agents):
     for agent in agents:
-        if random.uniform(0.0, 1.0) <= 0.4:
+        if random.uniform(0.0, 1.0) <= 0.5:
             weights = agent.neural_network.weights
             biases = agent.neural_network.biases
             shapes = [a.shape for a in weights] + [b.shape for b in biases]
@@ -178,7 +207,6 @@ def fitness(agents, X, y, batch_size):
         for i in range(0, num_samples, batch_size):
             X_batch = X[i:i + batch_size]
             y_batch = y[i:i + batch_size]
-
             yhat = agent.neural_network.propagate(X_batch)
             yhat = np.clip(yhat, epsilon, 1. - epsilon)  # Ensure yhat is within [epsilon, 1-epsilon]
             log_loss = -np.mean(y_batch * np.log(yhat) + (1 - y_batch) * np.log(1 - yhat))
@@ -187,18 +215,64 @@ def fitness(agents, X, y, batch_size):
         agent.fitness = np.mean(log_loss_list)  # Average log loss over all batches
     return agents
 
-def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations):
-    agents = generate_agents(population_size, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim)
-    batch_size = 256
-    best_solution = agents[0]
+def visualize(q, fig, ax, canvas, agent, h, color, title, training=True):
+    h_transformed = agent.neural_network.propagate(h, training, return_hidden=True)
+    print(f"h_transformed shape: {h_transformed.shape}")  # Add this line to check the shape of h_transformed
+    z = TSNE(n_components=2).fit_transform(h_transformed)
+    scatter = ax.scatter(z[:, 0], z[:, 1], s=70, c=color, cmap="Set2")
+    legend1 = ax.legend(*scatter.legend_elements(), loc="upper right", title="Classes")
+    ax.add_artist(legend1)
+    ax.set_title(title)
+    canvas.draw_idle()
+    plt.pause(0.1)
 
+    if(training):
+        # Save the figure
+        fig.savefig('TSNE_Before.png')
+    else:
+        fig.savefig('TSNE_After.png')
+
+def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after, ax_tsne_after, canvas1, canvas2, canvas3, X_train, X_test, y_train, y_test, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations):
+    agents = generate_agents(population_size, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim)
+    batch_size = 512
+    best_solution = agents[0]
+    print('X_train:', X_train.shape)
+    print('y_train:', y_train.shape)
+    # Clear the axes for the new plot
+    ax1.clear()
+    q.put(f'Please wait while we rendering the TSNE results...')
+
+    # We will keep track of loss and accuracy for each generation in these lists
+    losses = []
+    accuracies = []
+    iterations = []
+    train_loss = 0
+    train_accuracy = 0
+    # Visualize the data model before training
+    visualize(q, fig_tsne_before, ax_tsne_before, canvas2, best_solution, X_train, y_train, "Data Model - Before Training", training=True)
+    agents = fitness(agents, X_train, y_train, batch_size)
     for i in range(generations):
         print('Generation', i, ':')
+        q.put(f'Generation {i} :')
 
-        agents = fitness(agents, X_train, y_train, batch_size)
+        # Store values to build the graph over each iteration.
+        losses.append(train_loss)
+        accuracies.append(train_accuracy)
+        iterations.append(i)
+
+        ax1.clear()   # clear the plot for the new plot
+        ax1.plot(iterations, losses, 'r-', label='Loss')  # plot Loss with red line
+        ax1.plot(iterations, accuracies, 'b-', label='Accuracy')  # plot Accuracy score with blue line
+        ax1.set_xlabel('Generations')  # Set the x-axis label
+        ax1.set_ylabel('Evaluate Training Phase')  # Set the y-axis label
+        ax1.legend()
+
+        # Ask the canvas to redraw itself the next time it can
+        canvas1.draw()  # refresh the canvas
+
         agents = selection(agents)
         # Apply crossover and mutation
-        agents = crossover(agents, population_size, best_agent=best_solution)
+        agents = crossover(input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, agents, population_size, best_agent=best_solution)
         agents = mutation(agents)
         agents = fitness(agents, X_train, y_train, batch_size)
 
@@ -208,7 +282,9 @@ def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_di
 
         train_loss = best_agent.fitness
         train_accuracy = calculate_accuracy(best_agent, X_train, y_train)
+
         print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}")
+        q.put(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}")
 
     for agent in agents:
         isTrain = False
@@ -217,6 +293,8 @@ def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_di
         train_accuracy = calculate_accuracy(agent, X_train, y_train, isTrain)
 
         print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
+        q.put(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
+
 
     isTrain = False
     train_loss = best_solution.fitness
@@ -224,40 +302,17 @@ def execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_di
     train_accuracy = calculate_accuracy(best_solution, X_train, y_train, isTrain)
     print("Best solution: ")
     print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
+    y_pred = best_solution.neural_network.propagate(X_test)
+    y_pred = np.round(y_pred)  # convert probabilities to class labels
+    cm = confusion_matrix(y_test, y_pred)
+    precision, recall, fscore, _ = precision_recall_fscore_support(y_test, y_pred, average='binary')
+    q.put(f'Please wait while we rendering the TSNE results...')
+    visualize(q, fig_tsne_after, ax_tsne_after, canvas3, best_solution, X_train, y_train, "Data Model - After Training", training=False)
+    # Add the new metrics to the GUI
+    q.put(('result', train_loss, precision, recall, fscore, test_accuracy))
 
     save_network(best_solution, "wnet")
     return best_solution
-
-
-def prepare_data(file, test_ratio=0.3):
-    with open(file, "r") as f:
-        data = f.readlines()
-
-    inputs, outputs = [], []
-    for line in data:
-        split_line = line.split()
-        inputs.append([int(char) for char in split_line[0]])
-        outputs.append([int(split_line[1])])
-
-    X = np.array(inputs)
-
-    y = np.array(outputs)
-
-    # shuffle indices to make the split random
-    indices = np.arange(X.shape[0])
-    np.random.shuffle(indices)
-
-    # calculate the test set size
-    test_set_size = int(X.shape[0] * test_ratio)
-
-    X_test = X[indices[:test_set_size]]
-    y_test = y[indices[:test_set_size]]
-
-    X_train = X[indices[test_set_size:]]
-    y_train = y[indices[test_set_size:]]
-
-    return X_train, X_test, y_train, y_test
-
 
 def save_network(agent, filename):
     # Save weights and biases into dictionary
@@ -265,6 +320,8 @@ def save_network(agent, filename):
     for i, (weight, bias) in enumerate(zip(agent.neural_network.weights, agent.neural_network.biases)):
         network_dict[f'weight_{i}'] = weight
         network_dict[f'bias_{i}'] = bias
+        network_dict[f'bn_mean_{i}'] = agent.neural_network.bn_means[i]  # Save batch normalization mean
+        network_dict[f'bn_var_{i}'] = agent.neural_network.bn_vars[i]  # Save batch normalization variance
 
     # Save architecture information
     network_dict['input_dim'] = agent.neural_network.weights[0].shape[1]
@@ -277,21 +334,3 @@ def save_network(agent, filename):
 
     # Save the dictionary to a numpy .npz file
     np.savez(filename, **network_dict)
-
-
-
-if __name__ == "__main__":
-    X_train, X_test, y_train, y_test = prepare_data("nn0.txt")
-    input_dim = X_train.shape[1]
-    print(f"Number of samples(strings) in the train set: {X_train.shape[0]}")
-    print(f"Number of bits in each string: {X_train.shape[1]}")
-
-    hidden1_dim = 8
-    hidden2_dim = 5
-    hidden3_dim = 3
-    output_dim = y_train.shape[1]
-    print(f"Number of labels in the train set: {y_train.shape[1]}")
-    population_size = 100
-    generations = 180
-    best_agent = execute(X_train, y_train, X_test, y_test, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations)
-    print(f"Best Agent's fitness: {best_agent.fitness}")
