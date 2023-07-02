@@ -147,7 +147,7 @@ if __name__ == "__main__":
     true_labels_file = "true_label0_MoreV1.txt"
     predictions_file = "predicted_labels0_MoreV1.txt"
     test_data_file = "testnet0_MoreV1.txt"
-    runnet('wnet.npz', test_data_file, predictions_file)
+    runnet('wnet0.npz', test_data_file, predictions_file)
     print(f"Done")
     # Use the function
 
