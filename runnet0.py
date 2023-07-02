@@ -8,12 +8,12 @@ class Agent:
 class NeuralNetwork:
     def __init__(self, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, dropout_rate=0.2):
         self.weights = [
-            np.random.randn(hidden1_dim, input_dim),
-            np.random.randn(hidden2_dim, hidden1_dim),
-            np.random.randn(hidden3_dim, hidden2_dim),
-            np.random.randn(output_dim, hidden3_dim),
-
+            np.random.randn(hidden1_dim, input_dim) / np.sqrt(input_dim),
+            np.random.randn(hidden2_dim, hidden1_dim) / np.sqrt(hidden1_dim),
+            np.random.randn(hidden3_dim, hidden2_dim) / np.sqrt(hidden2_dim),
+            np.random.randn(output_dim, hidden3_dim) / np.sqrt(hidden3_dim),
         ]
+
         self.biases = [
             np.random.randn(hidden1_dim, 1),
             np.random.randn(hidden2_dim, 1),
@@ -21,52 +21,62 @@ class NeuralNetwork:
             np.random.randn(output_dim, 1)
         ]
         self.dropout_rate = dropout_rate
+        # New instance variables for batch norm
+        self.bn_means = [np.zeros((1, dim)) for dim in [hidden1_dim, hidden2_dim, hidden3_dim, output_dim]]
+        self.bn_vars = [np.zeros((1, dim)) for dim in [hidden1_dim, hidden2_dim, hidden3_dim, output_dim]]
+        self.bn_decay = 0.9  # Decay rate for the running averages
 
-    def propagate(self, X, training=True):
+    def propagate(self, X, training=True, return_hidden=False):
         X = np.array(X).reshape(-1, self.weights[0].shape[1])  # Ensure X has the correct shape
-        hidden1 = self.relu(np.dot(X, self.weights[0].T) + self.biases[0].T)
-        #
-        # if training:
-        #     self.dropout_rate = 0.2
-        #     # Apply dropout to hidden1
-        #     mask1 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden1.shape) / (1 - self.dropout_rate)
-        #     hidden1 *= mask1
+        hidden1 = self.elu(np.dot(X, self.weights[0].T) + self.biases[0].T)
 
         hidden2 = self.relu(np.dot(hidden1, self.weights[1].T) + self.biases[1].T)
+        hidden2 = self.batch_norm(hidden2, 1, training)  # Specify layer index and training
 
-        # if training:
-        #     # Apply dropout to hidden layers
-        #     mask2 = np.random.binomial(1, 1 - self.dropout_rate, size=hidden2.shape) / (1 - self.dropout_rate)
-        #     hidden2 *= mask2
-
-        hidden3 = self.relu(np.dot(hidden2, self.weights[2].T) + self.biases[2].T)
-
+        hidden3 = self.elu(np.dot(hidden2, self.weights[2].T) + self.biases[2].T)
+        hidden3 = self.dropout(hidden3, self.dropout_rate, training)
 
         output_layer = self.sigmoid(np.dot(hidden3, self.weights[3].T) + self.biases[3].T)
 
-        return output_layer
-
+        # If we're interested in the activations of the last hidden layer for draw TSNE:
+        if return_hidden:
+            return hidden3
+        else:
+            return output_layer
 
     def relu(self, x):
         return np.maximum(0, x)
+
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-x))
 
+    def elu(self, x,
+            alpha=1.0):  # The alpha parameter controls the value that ELU converges towards for negative net inputs
+        return np.where(x >= 0.0, x, alpha * (np.exp(x) - 1))
 
-def save_network(agent, filename):
-    with open(filename, "w") as f:
-        # Saving dimensions
-        f.write(f"{len(agent.neural_network.weights)}\n") # number of layers
-        for weight in agent.neural_network.weights:
-            f.write(f"{weight.shape[0]} {weight.shape[1]}\n") # dimensions of each layer
+    def dropout(self, X, dropout_rate, training=True):
+        if not training:
+            return X
+        keep_prob = 1 - dropout_rate
+        mask = np.random.binomial(1, keep_prob, size=X.shape) / keep_prob
+        return X * mask
 
-        # Saving weights
-        for weight in agent.neural_network.weights:
-            np.savetxt(f, weight)
+    def batch_norm(self, X, layer, training=True):
+        if training:
+            mean = np.mean(X, axis=0, keepdims=True)
+            var = np.var(X, axis=0, keepdims=True)
 
-        # Saving biases
-        for bias in agent.neural_network.biases:
-            np.savetxt(f, bias)
+            # Update running averages
+            self.bn_means[layer] = self.bn_decay * self.bn_means[layer] + (1 - self.bn_decay) * mean
+            self.bn_vars[layer] = self.bn_decay * self.bn_vars[layer] + (1 - self.bn_decay) * var
+        else:
+            # Use running averages
+            mean = self.bn_means[layer]
+            var = self.bn_vars[layer]
+
+        X_norm = (X - mean) / np.sqrt(var + 1e-8)
+        return X_norm
+
 
 def load_network(filename):
     # Load the dictionary from the numpy .npz file
