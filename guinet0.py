@@ -1,6 +1,6 @@
 import tkinter as tk
 import numpy as np
-import buildnet0
+import buildnet1
 import threading
 import queue
 import sys
@@ -93,7 +93,7 @@ def run_genetic_algorithm():
     generations = 250
 
     # Start the execution in a new thread
-    thread = threading.Thread(target=buildnet0.execute, args=(
+    thread = threading.Thread(target=buildnet1.execute, args=(
         q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after, ax_tsne_after, canvas1, canvas2, canvas3,
         X_train, X_test, y_train, y_test, input_dim,
         hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations))
