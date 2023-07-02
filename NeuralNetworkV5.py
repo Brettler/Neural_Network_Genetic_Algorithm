@@ -217,14 +217,13 @@ def fitness(agents, X, y, batch_size):
 
 def visualize(q, fig, ax, canvas, agent, h, color, title, training=True):
     h_transformed = agent.neural_network.propagate(h, training, return_hidden=True)
-    print(f"h_transformed shape: {h_transformed.shape}")  # Add this line to check the shape of h_transformed
     z = TSNE(n_components=2).fit_transform(h_transformed)
     scatter = ax.scatter(z[:, 0], z[:, 1], s=70, c=color, cmap="Set2")
     legend1 = ax.legend(*scatter.legend_elements(), loc="upper right", title="Classes")
     ax.add_artist(legend1)
     ax.set_title(title)
     canvas.draw_idle()
-    plt.pause(0.1)
+    plt.pause(0.5)
 
     if(training):
         # Save the figure
@@ -250,6 +249,8 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
     train_accuracy = 0
     # Visualize the data model before training
     visualize(q, fig_tsne_before, ax_tsne_before, canvas2, best_solution, X_train, y_train, "Data Model - Before Training", training=True)
+    canvas2.draw()
+
     agents = fitness(agents, X_train, y_train, batch_size)
     for i in range(generations):
         print('Generation', i, ':')
@@ -304,13 +305,15 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
     print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
     y_pred = best_solution.neural_network.propagate(X_test)
     y_pred = np.round(y_pred)  # convert probabilities to class labels
-    cm = confusion_matrix(y_test, y_pred)
+    #cm = confusion_matrix(y_test, y_pred)
     precision, recall, fscore, _ = precision_recall_fscore_support(y_test, y_pred, average='binary')
     q.put(f'Please wait while we rendering the TSNE results...')
     visualize(q, fig_tsne_after, ax_tsne_after, canvas3, best_solution, X_train, y_train, "Data Model - After Training", training=False)
+    canvas3.draw()
+    q.put(f'Done!')
     # Add the new metrics to the GUI
-    q.put(('result', train_loss, precision, recall, fscore, test_accuracy))
-
+    q.put(('result', train_loss, precision, recall, fscore, test_accuracy, train_accuracy))
+    fig_graphs.savefig('Graph_Results.png')
     save_network(best_solution, "wnet")
     return best_solution
 
@@ -328,7 +331,6 @@ def save_network(agent, filename):
     network_dict['hidden1_dim'] = agent.neural_network.weights[0].shape[0]
     network_dict['hidden2_dim'] = agent.neural_network.weights[1].shape[0]
     network_dict['hidden3_dim'] = agent.neural_network.weights[2].shape[0]
-
     network_dict['output_dim'] = agent.neural_network.weights[3].shape[0]
     network_dict['dropout_rate'] = agent.neural_network.dropout_rate
 
