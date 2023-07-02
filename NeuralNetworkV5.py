@@ -286,11 +286,21 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
 
         print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}")
         q.put(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}")
+        if train_accuracy > 0.992 and train_loss < 0.02 and generations >= 200:
+            break
 
+    bestTestScore = -np.inf
+    bestLoss = np.inf
+    bestNeuralNetwork = best_solution
     for agent in agents:
         isTrain = False
         train_loss = agent.fitness
         test_accuracy = calculate_accuracy(agent, X_test, y_test, isTrain)
+        if test_accuracy > bestTestScore:
+            bestTestScore = test_accuracy
+            bestNeuralNetwork = agent
+        if test_accuracy == bestTestScore and bestLoss > train_loss:
+            bestNeuralNetwork = agent
         train_accuracy = calculate_accuracy(agent, X_train, y_train, isTrain)
 
         print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
@@ -298,24 +308,24 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
 
 
     isTrain = False
-    train_loss = best_solution.fitness
-    test_accuracy = calculate_accuracy(best_solution, X_test, y_test, isTrain)
-    train_accuracy = calculate_accuracy(best_solution, X_train, y_train, isTrain)
+    train_loss = bestNeuralNetwork.fitness
+    test_accuracy = calculate_accuracy(bestNeuralNetwork, X_test, y_test, isTrain)
+    train_accuracy = calculate_accuracy(bestNeuralNetwork, X_train, y_train, isTrain)
     print("Best solution: ")
     print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
-    y_pred = best_solution.neural_network.propagate(X_test)
+    y_pred = bestNeuralNetwork.neural_network.propagate(X_test)
     y_pred = np.round(y_pred)  # convert probabilities to class labels
     #cm = confusion_matrix(y_test, y_pred)
     precision, recall, fscore, _ = precision_recall_fscore_support(y_test, y_pred, average='binary')
     q.put(f'Please wait while we rendering the TSNE results...')
-    visualize(q, fig_tsne_after, ax_tsne_after, canvas3, best_solution, X_train, y_train, "Data Model - After Training", training=False)
+    visualize(q, fig_tsne_after, ax_tsne_after, canvas3, bestNeuralNetwork, X_train, y_train, "Data Model - After Training", training=False)
     canvas3.draw()
     q.put(f'Done!')
     # Add the new metrics to the GUI
     q.put(('result', train_loss, precision, recall, fscore, test_accuracy, train_accuracy))
     fig_graphs.savefig('Graph_Results.png')
-    save_network(best_solution, "wnet")
-    return best_solution
+    save_network(bestNeuralNetwork, "wnet")
+    return bestNeuralNetwork
 
 def save_network(agent, filename):
     # Save weights and biases into dictionary
