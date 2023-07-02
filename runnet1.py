@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from tkinter import Tk, Label, Button, Entry, StringVar, DISABLED, NORMAL, END, W
+from tkinter import Tk, Label, Button, Entry, StringVar, DISABLED, W
 import tkinter.messagebox as messagebox
 
 from sklearn.metrics import precision_recall_fscore_support
@@ -9,7 +9,7 @@ from sklearn.metrics import precision_recall_fscore_support
 class Gui:
     def __init__(self, master):
         self.master = master
-        master.title("RUNNET0 - Neural Network Prediction")
+        master.title("RUNNET1 - Neural Network Prediction")
 
         self.label1 = Label(master, text="True Labels File (optional to evaluate the model):")
         self.label2 = Label(master, text="Predictions File (output):")
@@ -17,9 +17,9 @@ class Gui:
         self.label4 = Label(master, text="Model Name:")
 
         self.true_labels_file = StringVar(value="")
-        self.predictions_file = StringVar(value="nn0_prediction.txt")
-        self.test_data_file = StringVar(value="testnet0.txt")
-        self.model_name = StringVar(value="wnet0.npz")
+        self.predictions_file = StringVar(value="nn1_prediction.txt")
+        self.test_data_file = StringVar(value="testnet1.txt")
+        self.model_name = StringVar(value="wnet1.npz")
 
         self.entry1 = Entry(master, textvariable=self.true_labels_file)
         self.entry2 = Entry(master, textvariable=self.predictions_file)
@@ -119,8 +119,8 @@ class NeuralNetwork:
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-x))
 
-    def elu(self, x,
-            alpha=1.0):  # The alpha parameter controls the value that ELU converges towards for negative net inputs
+    # The alpha parameter controls the value that ELU converges towards for negative net inputs
+    def elu(self, x, alpha=1.0):
         return np.where(x >= 0.0, x, alpha * (np.exp(x) - 1))
 
     def dropout(self, X, dropout_rate, training=True):

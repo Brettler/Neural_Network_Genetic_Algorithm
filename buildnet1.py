@@ -1,7 +1,7 @@
 import random
 import numpy as np
 from matplotlib import pyplot as plt
-from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+from sklearn.metrics import precision_recall_fscore_support
 from sklearn.manifold import TSNE
 
 class Agent:
@@ -227,19 +227,17 @@ def visualize(q, fig, ax, canvas, agent, h, color, title, training=True):
 
     if(training):
         # Save the figure
-        fig.savefig('TSNE_Before.png')
+        fig.savefig('TSNE_Before_nn1.png')
     else:
-        fig.savefig('TSNE_After.png')
+        fig.savefig('TSNE_After_nn1.png')
 
 def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after, ax_tsne_after, canvas1, canvas2, canvas3, X_train, X_test, y_train, y_test, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations):
     agents = generate_agents(population_size, input_dim, hidden1_dim, hidden2_dim, hidden3_dim, output_dim)
     batch_size = 512
     best_solution = agents[0]
-    print('X_train:', X_train.shape)
-    print('y_train:', y_train.shape)
     # Clear the axes for the new plot
     ax1.clear()
-    q.put(f'Please wait while we rendering the TSNE results...')
+    q.put(f'Please wait while we render the t-SNE results...')
 
     # We will keep track of loss and accuracy for each generation in these lists
     losses = []
@@ -250,10 +248,9 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
     # Visualize the data model before training
     visualize(q, fig_tsne_before, ax_tsne_before, canvas2, best_solution, X_train, y_train, "Data Model - Before Training", training=True)
     canvas2.draw()
-
+    gen = 0
     agents = fitness(agents, X_train, y_train, batch_size)
     for i in range(generations):
-        print('Generation', i, ':')
         q.put(f'Generation {i} :')
 
         # Store values to build the graph over each iteration.
@@ -284,9 +281,9 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
         train_loss = best_agent.fitness
         train_accuracy = calculate_accuracy(best_agent, X_train, y_train)
 
-        print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}")
         q.put(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}")
-        if train_accuracy > 0.992 and train_loss < 0.02 and generations >= 200:
+        gen = i
+        if train_accuracy > 0.992 and train_loss < 0.02:
             break
 
     bestTestScore = -np.inf
@@ -303,7 +300,6 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
             bestNeuralNetwork = agent
         train_accuracy = calculate_accuracy(agent, X_train, y_train, isTrain)
 
-        print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
         q.put(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
 
 
@@ -311,19 +307,18 @@ def execute(q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after,
     train_loss = bestNeuralNetwork.fitness
     test_accuracy = calculate_accuracy(bestNeuralNetwork, X_test, y_test, isTrain)
     train_accuracy = calculate_accuracy(bestNeuralNetwork, X_train, y_train, isTrain)
-    print("Best solution: ")
-    print(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
+    q.put(f"Chosen model values (after {gen} generations): ")
+    q.put(f"Train Loss: {train_loss}, Train Accuracy: {train_accuracy}, Test Accuracy: {test_accuracy}")
     y_pred = bestNeuralNetwork.neural_network.propagate(X_test)
     y_pred = np.round(y_pred)  # convert probabilities to class labels
-    #cm = confusion_matrix(y_test, y_pred)
     precision, recall, fscore, _ = precision_recall_fscore_support(y_test, y_pred, average='binary')
-    q.put(f'Please wait while we rendering the TSNE results...')
+    q.put(f'Please wait while we render the t-SNE results and evaluate the model...')
     visualize(q, fig_tsne_after, ax_tsne_after, canvas3, bestNeuralNetwork, X_train, y_train, "Data Model - After Training", training=False)
     canvas3.draw()
     q.put(f'Done!')
     # Add the new metrics to the GUI
     q.put(('result', train_loss, precision, recall, fscore, test_accuracy, train_accuracy))
-    fig_graphs.savefig('Graph_Results.png')
+    fig_graphs.savefig('Graph_Results_nn1.png')
     save_network(bestNeuralNetwork, "wnet")
     return bestNeuralNetwork
 
