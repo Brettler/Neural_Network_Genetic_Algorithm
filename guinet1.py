@@ -1,7 +1,6 @@
 import tkinter as tk
 import numpy as np
-import NeuralNetworkV5
-from tkinter import ttk
+import buildnet0
 import threading
 import queue
 import sys
@@ -12,30 +11,8 @@ from tkinter import messagebox
 message_queue = []  # Store the messages
 current_message_index = 0  # Index of the current message being displayed
 # Set default values for the global variables
-default_train_file = 'train_nn0.txt'
-default_test_file = 'test_nn0.txt'
-
-# def split_file(file, train_file, test_file, test_ratio=0.2):
-#     with open(file, "r") as f:
-#         data = f.readlines()
-#
-#     # shuffle the data
-#     np.random.shuffle(data)
-#
-#     # calculate the test set size
-#     test_set_size = int(len(data) * test_ratio)
-#     train_data = data[test_set_size:]
-#     test_data = data[:test_set_size]
-#
-#     # write train data to file
-#     with open(train_file, "w") as train_f:
-#         train_f.writelines(train_data)
-#
-#     # write test data to file
-#     with open(test_file, "w") as test_f:
-#         test_f.writelines(test_data)
-#
-#     print("Data split and saved successfully!")
+default_train_file = 'train_nn1.txt'
+default_test_file = 'test_nn1.txt'
 
 
 def prepare_data(train_file, test_file):
@@ -63,27 +40,6 @@ def prepare_data(train_file, test_file):
     y_test = np.array(test_outputs)
 
     return X_train, X_test, y_train, y_test
-
-# def prepare_data(file, test_ratio=0.2):
-#     with open(file, "r") as f:
-#         data = f.readlines()
-#     inputs, outputs = [], []
-#     for line in data:
-#         split_line = line.split()
-#         inputs.append([int(char) for char in split_line[0]])
-#         outputs.append([int(split_line[1])])
-#     X = np.array(inputs)
-#     y = np.array(outputs)
-#     # shuffle indices to make the split random
-#     indices = np.arange(X.shape[0])
-#     np.random.shuffle(indices)
-#     # calculate the test set size
-#     test_set_size = int(X.shape[0] * test_ratio)
-#     X_test = X[indices[:test_set_size]]
-#     y_test = y[indices[:test_set_size]]
-#     X_train = X[indices[test_set_size:]]
-#     y_train = y[indices[test_set_size:]]
-#     return X_train, X_test, y_train, y_test
 
 
 def check_queue(q):
@@ -130,6 +86,7 @@ def run_genetic_algorithm():
     current_message_index = 0  # Reset the current message index
     q = queue.Queue()
     X_train, X_test, y_train, y_test = prepare_data(default_train_file, default_test_file)
+
     input_dim = X_train.shape[1]
     hidden1_dim = 8
     hidden2_dim = 5
@@ -139,7 +96,7 @@ def run_genetic_algorithm():
     generations = 250
 
     # Start the execution in a new thread
-    thread = threading.Thread(target=NeuralNetworkV5.execute, args=(
+    thread = threading.Thread(target=buildnet0.execute, args=(
         q, fig_graphs, ax1, fig_tsne_before, ax_tsne_before, fig_tsne_after, ax_tsne_after, canvas1, canvas2, canvas3,
         X_train, X_test, y_train, y_test, input_dim,
         hidden1_dim, hidden2_dim, hidden3_dim, output_dim, population_size, generations))
