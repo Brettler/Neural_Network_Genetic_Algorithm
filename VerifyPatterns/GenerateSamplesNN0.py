@@ -5,25 +5,25 @@ def generate_samples_labels():
     for _ in range(20000):
         string = ''.join(random.choices(['0', '1'], k=16))
         count_ones = string.count('1')
-        label = '1' if count_ones <= 7 else '0'
+        label = '1' if count_ones >= 8 and count_ones <= 12 else '0'
         samples_labels.append((string, label))
 
-    with open('testnet1_samples_labels.txt', 'w') as file:
+    with open('../testnet0_samples_labels.txt', 'w') as file:
         for sample, label in samples_labels:
             file.write(f"{sample}\t{label}\n")
 
 def split_samples_labels():
-    with open('testnet1_samples_labels.txt', 'r') as file:
+    with open('../testnet0_samples_labels.txt', 'r') as file:
         lines = file.readlines()
 
     samples = [line.split()[0] for line in lines]
     labels = [line.split()[1] for line in lines]
 
-    with open('testnet1.txt', 'w') as file:
+    with open('../testnet0.txt', 'w') as file:
         for sample in samples:
             file.write(f"{sample}\n")
 
-    with open('testnet1_labels.txt', 'w') as file:
+    with open('../testnet0_labels.txt', 'w') as file:
         for label in labels:
             file.write(f"{label}\n")
 
