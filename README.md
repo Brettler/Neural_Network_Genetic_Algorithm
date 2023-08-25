@@ -2,8 +2,7 @@
 ## This project focuses on training neural networks using a genetic algorithm approach.
 
 ### 📚 **Documentation**
-_For a detailed explanation of the project, its architecture, and its features, please refer to our [**Report**](link-to-report)._
-
+_For a detailed explanation of the project, its architecture, and its features, please refer to our [**Report**](Report (Hebrew)/דוח - זיהוי תבניות באמצעות רשת נוירונים.pdf)
 ### 🎥 **Demo**
 _A video demonstration is available to help you understand how to run and utilize the program effectively. You can watch it [**here**](https://www.youtube.com/watch?v=X45aitACju0)._
 
