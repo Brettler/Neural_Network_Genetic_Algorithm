@@ -3,8 +3,8 @@ Neural networ trained by genetic algorithm<br>
 
 
 
-![TSNE Before](TSNE_Before_nn1.png)
+![TSNE Before](Results/TSNE_Before_nn1.png)
 <br>
 
-![TSNE After](TSNE_After_nn1.png)
+![TSNE After](Results/TSNE_After_nn1.png)
 

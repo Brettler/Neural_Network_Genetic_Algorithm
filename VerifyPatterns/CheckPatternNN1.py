@@ -18,4 +18,4 @@ def check_pattern(filename):
     print(f"Pattern not satisfied: {count_not_satisfied} strings")
 
 # Usage example
-check_pattern('nn1.txt')
+check_pattern('../nn1.txt')
