@@ -9,16 +9,6 @@ _A video demonstration is available to help you understand how to run and utiliz
 
 
 ### 🚀 **Quick Start**
-_If you'd like to try out the program, an executable version is available for download from this [**Google Drive link**](https://drive.google.com/drive/folders/1IJQXZ8kennlluNSdHSD-fuaQ_BIYOo8H?usp=drive_link)._
-
-### 📊 **Visual Results**
-#### t-SNE Visualization Before Training
-![TSNE Before](Results/TSNE_Before_nn1.png)
-
-#### t-SNE Visualization After Training
-![TSNE After](Results/TSNE_After_nn1.png)
-
-![Graph](Results/Graph_Results_nn1.png)
-
+_If you'd like to try out the program, an executable version is available for download from this [**Google Drive link**]([https://drive.google.com/drive/folders/1IJQXZ8kennlluNSdHSD-fuaQ_BIYOo8H?usp=drive_link](https://drive.google.com/drive/folders/1zjVoZISxNJmYD2GHkx-n5Hl-vtXxkLpH?usp=sharing))._
 
 
